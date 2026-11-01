@@ -1,0 +1,24 @@
+version: 1
+
+artifacts:
+  - name: teapot-unix
+    path: dist/teapot.tar.gz
+    binary: teapot
+    runs_on: [linux/amd64, linux/arm64, darwin/amd64, darwin/arm64]
+    checks:
+      - args: ["--version"]
+        expect:
+          exit_code: 0
+          stdout_contains: ["teapot version 0.3.1"]
+      - args: ["--help"]
+        expect: { exit_code: 0 }
+
+  - name: teapot-windows
+    path: dist/teapot.zip
+    binary: teapot.exe
+    runs_on: [windows/amd64, windows/arm64]
+    checks:
+      - args: ["--version"]
+        expect:
+          exit_code: 0
+          stdout_contains: ["teapot version 0.3.1"]
