@@ -50,7 +50,7 @@ jobs:
         with:
           config: .shipsmoke.yml
           report: shipsmoke-report.json
-          version: v1.0.2
+          version: v1.0.3
 
       - name: Assert exit code, verified provenance, and report
         shell: bash
@@ -122,7 +122,7 @@ jobs:
         with:
           config: .shipsmoke.yml
           report: ''
-          version: v1.0.2
+          version: v1.0.3
 
       - name: Assert the action failed the job
         shell: bash
