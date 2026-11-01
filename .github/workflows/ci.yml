@@ -101,9 +101,20 @@ jobs:
           else
             tar -czf dist/teapot.tar.gz -C dist teapot
           fi
-          # Corrupt the packaged artifact the way a broken upload would.
-          printf 'CORRUPTION' >> dist/teapot.tar.gz
-          printf 'CORRUPTION' >> dist/teapot.zip 2>/dev/null || true
+          # Corrupt the packaged artifact mid-file the way a broken upload
+          # would: flipped bytes in the middle trip gzip/zip CRC checks.
+          # (Appending trailing garbage would NOT: a complete tar payload
+          # followed by junk still extracts fine, and that is documented,
+          # accepted leniency.)
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            F="dist/teapot.zip"
+          else
+            F="dist/teapot.tar.gz"
+          fi
+          SIZE="$(wc -c < "$F" | tr -d ' ')"
+          OFF=$((SIZE / 2))
+          printf 'Þ­¾ï' | dd of="$F" bs=1 seek="$OFF" conv=notrunc 2>/dev/null
+          echo "corrupted $F at offset $OFF of $SIZE bytes"
 
       - name: 'Run shipsmoke action against the tampered artifact (expect failure)'
         id: tampered
