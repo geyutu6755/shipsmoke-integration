@@ -14,7 +14,8 @@ shipsmoke action consumed exactly as an outside user would:
     report: shipsmoke-report.json
 ```
 
-The workflow runs on ubuntu-24.04, macos-15 (arm64) and windows-2025 and
+The workflow pins the action to the published `@v1` major tag and the tool
+to `version: v1.0.2`, and runs on ubuntu-24.04, macos-15 (arm64) and windows-2025. It
 asserts that the action's `exit-code` output is `0` and that the JSON report
 is produced with `overall == PASS`. A second job verifies the refusal path:
 a tampered artifact must fail the action.

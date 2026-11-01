@@ -46,11 +46,11 @@ jobs:
       # guarantees this workflow tests precisely the reviewed action code.
       - name: 'Verify teapot release artifact (shipsmoke action)'
         id: verify
-        uses: geyutu6755/shipsmoke@541781ac40012ab68c90c9ee60a2dcbc0180c0c9
+        uses: geyutu6755/shipsmoke@v1
         with:
           config: .shipsmoke.yml
           report: shipsmoke-report.json
-          version: v1.0.1
+          version: v1.0.2
 
       - name: Assert exit code, verified provenance, and report
         shell: bash
@@ -118,11 +118,11 @@ jobs:
       - name: 'Run shipsmoke action against the tampered artifact (expect failure)'
         id: tampered
         continue-on-error: true
-        uses: geyutu6755/shipsmoke@541781ac40012ab68c90c9ee60a2dcbc0180c0c9
+        uses: geyutu6755/shipsmoke@v1
         with:
           config: .shipsmoke.yml
           report: ''
-          version: v1.0.1
+          version: v1.0.2
 
       - name: Assert the action failed the job
         shell: bash
