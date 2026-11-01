@@ -65,13 +65,6 @@ jobs:
           # indented YAML block scalar break the workflow parse entirely.
           python -c "import json,sys; d=json.load(open(sys.argv[1], encoding='utf-8')); assert d['summary']['overall']=='PASS', d['summary']; assert d['summary']['executed']>=1, d['summary']; print('report OK:', d['summary'])" "$REPORT"
 
-import json, sys
-d = json.load(open(sys.argv[1], encoding="utf-8"))
-assert d["summary"]["overall"] == "PASS", d["summary"]
-assert d["summary"]["executed"] >= 1, d["summary"]
-print("report OK:", d["summary"])
-PYEOF
-
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
