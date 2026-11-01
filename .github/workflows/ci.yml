@@ -60,7 +60,7 @@ jobs:
           set -euo pipefail
           [ "${{ steps.verify.outputs.exit-code }}" = "0" ] || { echo "exit-code=${{ steps.verify.outputs.exit-code }}, want 0"; exit 1; }
           [ "${{ steps.verify.outputs.verified }}" = "checksum" ] || { echo "verified=${{ steps.verify.outputs.verified }}, want checksum"; exit 1; }
-          [ "${{ steps.verify.outputs.resolved-version }}" = "v1.0.1" ] || { echo "resolved-version=${{ steps.verify.outputs.resolved-version }}"; exit 1; }
+          [ "${{ steps.verify.outputs.resolved-version }}" = "v1.0.2" ] || { echo "resolved-version=${{ steps.verify.outputs.resolved-version }}"; exit 1; }
           # python -c, not a heredoc: flush-left heredoc lines inside an
           # indented YAML block scalar break the workflow parse entirely.
           python -c "import json,sys; d=json.load(open(sys.argv[1], encoding='utf-8')); assert d['summary']['overall']=='PASS', d['summary']; assert d['summary']['executed']>=1, d['summary']; print('report OK:', d['summary'])" "$REPORT"
