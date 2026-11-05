@@ -1,0 +1,99 @@
+name: git-graph trial (Tier 0)
+
+# External-candidate trial: verify git-bahn/git-graph v0.8.3's real published
+# archives on real runners. This is a Tier 0 local trial recorded in
+# docs/ADOPTION.md — NOT adoption, and git-graph's maintainers have not been
+# contacted. Platform expectations, stated honestly:
+#   linux/amd64  -> shipsmoke gate runs the artifact for real (PASS expected)
+#   windows/amd64-> shipsmoke gate runs the artifact for real (PASS expected)
+#   macos/amd64  -> the gate runs on an arm64 macos-15 runner and the
+#                   platform gate correctly refuses a darwin/amd64 binary
+#                   (expected FAIL=mismatch, recorded as-is); the binary is
+#                   additionally executed under Rosetta 2 for evidence.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trial:
+    name: git-graph v0.8.3 (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            asset: git-graph-v0.8.3-linux-amd64.tar.gz
+            artifact: gitgraph-linux
+          - os: macos-15
+            asset: git-graph-v0.8.3-macos-amd64.tar.gz
+            artifact: gitgraph-macos
+          - os: windows-2025
+            asset: git-graph-v0.8.3-windows-amd64.tar.gz
+            artifact: gitgraph-windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Download the real published archive
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          curl -fsSL --retry 3 -o "dist/$ASSET" \
+            "https://github.com/git-bahn/git-graph/releases/download/v0.8.3/$ASSET"
+          ls -l "dist/$ASSET"
+
+      - name: Write the trial config
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'version: 1\nartifacts:\n  - name: gitgraph-linux\n    path: dist/git-graph-v0.8.3-linux-amd64.tar.gz\n    binary: git-graph\n    runs_on: [linux/amd64]\n    checks:\n      - args: ["--version"]\n        expect: { exit_code: 0, stdout_contains: ["git-graph"] }\n  - name: gitgraph-macos\n    path: dist/git-graph-v0.8.3-macos-amd64.tar.gz\n    binary: git-graph\n    runs_on: [darwin/amd64]\n    checks:\n      - args: ["--version"]\n        expect: { exit_code: 0, stdout_contains: ["git-graph"] }\n  - name: gitgraph-windows\n    path: dist/git-graph-v0.8.3-windows-amd64.tar.gz\n    binary: git-graph.exe\n    runs_on: [windows/amd64]\n    checks:\n      - args: ["--version"]\n        expect: { exit_code: 0, stdout_contains: ["git-graph"] }\n' > .shipsmoke-gitgraph.yml
+
+      - name: "Run the shipsmoke gate (linux/windows expect PASS; macos gate refuses a darwin/amd64 binary on an arm64 runner - recorded as-is)"
+        id: gate
+        continue-on-error: true
+        uses: geyutu6755/shipsmoke@v1
+        with:
+          version: v1.0.4
+          config: .shipsmoke-gitgraph.yml
+          artifact: ${{ matrix.artifact }}
+          report: dist/report.json
+
+      - name: macOS-only - execute the amd64 binary under Rosetta 2
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xzf "dist/git-graph-v0.8.3-macos-amd64.tar.gz"
+          file git-graph || true
+          arch -x86_64 ./git-graph --version
+
+      - name: Record the trial outcome for this platform
+        shell: bash
+        env:
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+          GATE_EXIT: ${{ steps.gate.outputs.exit-code }}
+          OS_NAME: ${{ matrix.os }}
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          echo "trial summary for $OS_NAME ($ASSET):"
+          echo "  shipsmoke gate outcome: $GATE_OUTCOME (exit ${GATE_EXIT:-n/a})"
+          if [ "$GATE_OUTCOME" = "success" ]; then
+            echo "  tier-0 result: real extraction + real execution, PASS"
+          else
+            echo "  tier-0 result: gate refused the artifact on this runner (see the gate log for the exact diagnosis); for darwin/amd64 on an arm64 runner this is the expected, honest platform-mismatch refusal, and the Rosetta step above provides the direct-execution evidence separately"
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gitgraph-trial-${{ matrix.os }}
+          path: dist/report.json
+          if-no-files-found: ignore
