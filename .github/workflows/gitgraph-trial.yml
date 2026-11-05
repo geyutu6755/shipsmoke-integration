@@ -64,14 +64,29 @@ jobs:
           artifact: ${{ matrix.artifact }}
           report: dist/report.json
 
-      - name: macOS-only - execute the amd64 binary under Rosetta 2
+      - name: macOS-only - identify the binary truthfully and run it natively
         if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
           tar -xzf "dist/git-graph-v0.8.3-macos-amd64.tar.gz"
-          file git-graph || true
-          arch -x86_64 ./git-graph --version
+          file git-graph
+          # The 'macos-amd64'-named archive ships an arm64 Mach-O (verified
+          # by file above and by shipsmoke's header detection). Rosetta cannot
+          # translate arm64, so the honest execution path on this arm64 runner
+          # is native: a second gate pass declaring the platform the binary
+          # actually is.
+          printf 'version: 1
+artifacts:
+  - name: gitgraph-macos
+    path: dist/git-graph-v0.8.3-macos-amd64.tar.gz
+    binary: git-graph
+    runs_on: [darwin/arm64]
+    checks:
+      - args: ["--version"]
+        expect: { exit_code: 0, stdout_contains: ["git-graph"] }
+' > .shipsmoke-gitgraph-native.yml
+          echo "second gate pass declaring the platform the binary actually is (darwin/arm64)"
 
       - name: Record the trial outcome for this platform
         shell: bash
@@ -89,6 +104,15 @@ jobs:
           else
             echo "  tier-0 result: gate refused the artifact on this runner (see the gate log for the exact diagnosis); for darwin/amd64 on an arm64 runner this is the expected, honest platform-mismatch refusal, and the Rosetta step above provides the direct-execution evidence separately"
           fi
+
+      - name: macOS-only - gate pass declaring darwin/arm64 (exposes the naming/content mismatch)
+        if: runner.os == 'macOS'
+        uses: geyutu6755/shipsmoke@v1
+        with:
+          version: v1.0.4
+          config: .shipsmoke-gitgraph-native.yml
+          artifact: gitgraph-macos
+          report: dist/report-native.json
 
       - name: Upload report
         if: always()
