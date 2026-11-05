@@ -6,10 +6,11 @@ name: git-graph trial (Tier 0)
 # contacted. Platform expectations, stated honestly:
 #   linux/amd64  -> shipsmoke gate runs the artifact for real (PASS expected)
 #   windows/amd64-> shipsmoke gate runs the artifact for real (PASS expected)
-#   macos/amd64  -> the gate runs on an arm64 macos-15 runner and the
-#                   platform gate correctly refuses a darwin/amd64 binary
-#                   (expected FAIL=mismatch, recorded as-is); the binary is
-#                   additionally executed under Rosetta 2 for evidence.
+#   macos/amd64  -> the gate runs on an arm64 macos-15 runner. Finding: the
+#                   'macos-amd64'-named archive actually ships an arm64
+#                   Mach-O binary (confirmed with file(1) and shipsmoke's
+#                   header detection), so the first pass SKIPs honestly and a
+#                   second pass declaring darwin/arm64 executes it natively.
 
 on:
   workflow_dispatch:
@@ -50,11 +51,37 @@ jobs:
 
       - name: Write the trial config
         shell: bash
+        env:
+          GITGRAPH_CONFIG: ${{ github.workspace }}/.shipsmoke-gitgraph.yml
         run: |
           set -euo pipefail
-          printf 'version: 1\nartifacts:\n  - name: gitgraph-linux\n    path: dist/git-graph-v0.8.3-linux-amd64.tar.gz\n    binary: git-graph\n    runs_on: [linux/amd64]\n    checks:\n      - args: ["--version"]\n        expect: { exit_code: 0, stdout_contains: ["git-graph"] }\n  - name: gitgraph-macos\n    path: dist/git-graph-v0.8.3-macos-amd64.tar.gz\n    binary: git-graph\n    runs_on: [darwin/amd64]\n    checks:\n      - args: ["--version"]\n        expect: { exit_code: 0, stdout_contains: ["git-graph"] }\n  - name: gitgraph-windows\n    path: dist/git-graph-v0.8.3-windows-amd64.tar.gz\n    binary: git-graph.exe\n    runs_on: [windows/amd64]\n    checks:\n      - args: ["--version"]\n        expect: { exit_code: 0, stdout_contains: ["git-graph"] }\n' > .shipsmoke-gitgraph.yml
+          {
+            echo 'version: 1'
+            echo 'artifacts:'
+            echo '  - name: gitgraph-linux'
+            echo '    path: dist/git-graph-v0.8.3-linux-amd64.tar.gz'
+            echo '    binary: git-graph'
+            echo '    runs_on: [linux/amd64]'
+            echo '    checks:'
+            echo '      - args: ["--version"]'
+            echo '        expect: { exit_code: 0, stdout_contains: ["git-graph"] }'
+            echo '  - name: gitgraph-macos'
+            echo '    path: dist/git-graph-v0.8.3-macos-amd64.tar.gz'
+            echo '    binary: git-graph'
+            echo '    runs_on: [darwin/amd64]'
+            echo '    checks:'
+            echo '      - args: ["--version"]'
+            echo '        expect: { exit_code: 0, stdout_contains: ["git-graph"] }'
+            echo '  - name: gitgraph-windows'
+            echo '    path: dist/git-graph-v0.8.3-windows-amd64.tar.gz'
+            echo '    binary: git-graph.exe'
+            echo '    runs_on: [windows/amd64]'
+            echo '    checks:'
+            echo '      - args: ["--version"]'
+            echo '        expect: { exit_code: 0, stdout_contains: ["git-graph"] }'
+          } > "$GITGRAPH_CONFIG"
 
-      - name: "Run the shipsmoke gate (linux/windows expect PASS; macos gate refuses a darwin/amd64 binary on an arm64 runner - recorded as-is)"
+      - name: "Run the shipsmoke gate (linux/windows expect PASS; macos gate SKIPs the darwin/amd64 declaration on an arm64 runner - recorded as-is)"
         id: gate
         continue-on-error: true
         uses: geyutu6755/shipsmoke@v1
@@ -64,29 +91,40 @@ jobs:
           artifact: ${{ matrix.artifact }}
           report: dist/report.json
 
-      - name: macOS-only - identify the binary truthfully and run it natively
+      - name: "macOS only - identify the binary truthfully and run it natively"
         if: runner.os == 'macOS'
         shell: bash
+        env:
+          GITGRAPH_NATIVE: ${{ github.workspace }}/.shipsmoke-gitgraph-native.yml
         run: |
           set -euo pipefail
           tar -xzf "dist/git-graph-v0.8.3-macos-amd64.tar.gz"
           file git-graph
-          # The 'macos-amd64'-named archive ships an arm64 Mach-O (verified
-          # by file above and by shipsmoke's header detection). Rosetta cannot
-          # translate arm64, so the honest execution path on this arm64 runner
-          # is native: a second gate pass declaring the platform the binary
-          # actually is.
-          printf 'version: 1
-artifacts:
-  - name: gitgraph-macos
-    path: dist/git-graph-v0.8.3-macos-amd64.tar.gz
-    binary: git-graph
-    runs_on: [darwin/arm64]
-    checks:
-      - args: ["--version"]
-        expect: { exit_code: 0, stdout_contains: ["git-graph"] }
-' > .shipsmoke-gitgraph-native.yml
-          echo "second gate pass declaring the platform the binary actually is (darwin/arm64)"
+          # The 'macos-amd64'-named archive ships an arm64 Mach-O (confirmed by
+          # file above and by shipsmoke's header detection): Intel-Mac users of
+          # this asset get a broken download. Rosetta cannot translate arm64,
+          # so the honest execution path on this arm64 runner is native: a
+          # second gate pass declaring the platform the binary actually is.
+          {
+            echo 'version: 1'
+            echo 'artifacts:'
+            echo '  - name: gitgraph-macos'
+            echo '    path: dist/git-graph-v0.8.3-macos-amd64.tar.gz'
+            echo '    binary: git-graph'
+            echo '    runs_on: [darwin/arm64]'
+            echo '    checks:'
+            echo '      - args: ["--version"]'
+            echo '        expect: { exit_code: 0, stdout_contains: ["git-graph"] }'
+          } > "$GITGRAPH_NATIVE"
+
+      - name: "macOS only - gate pass declaring darwin/arm64 (exposes the naming/content mismatch)"
+        if: runner.os == 'macOS'
+        uses: geyutu6755/shipsmoke@v1
+        with:
+          version: v1.0.4
+          config: .shipsmoke-gitgraph-native.yml
+          artifact: gitgraph-macos
+          report: dist/report-native.json
 
       - name: Record the trial outcome for this platform
         shell: bash
@@ -102,17 +140,8 @@ artifacts:
           if [ "$GATE_OUTCOME" = "success" ]; then
             echo "  tier-0 result: real extraction + real execution, PASS"
           else
-            echo "  tier-0 result: gate refused the artifact on this runner (see the gate log for the exact diagnosis); for darwin/amd64 on an arm64 runner this is the expected, honest platform-mismatch refusal, and the Rosetta step above provides the direct-execution evidence separately"
+            echo "  tier-0 result: gate refused or skipped the artifact on this runner; see the gate log and the native-execution step (macOS) for the exact, honest diagnosis"
           fi
-
-      - name: macOS-only - gate pass declaring darwin/arm64 (exposes the naming/content mismatch)
-        if: runner.os == 'macOS'
-        uses: geyutu6755/shipsmoke@v1
-        with:
-          version: v1.0.4
-          config: .shipsmoke-gitgraph-native.yml
-          artifact: gitgraph-macos
-          report: dist/report-native.json
 
       - name: Upload report
         if: always()
